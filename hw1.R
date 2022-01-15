@@ -18,7 +18,7 @@ C2weightsInterceptPreds <- function(C=100, df_=df) {
 
   # see what the model predicts
   pred <- predict(model, df_[,1:10])
-  list(a, a0, pred)
+  list(a, a0, pred) # return weights (a) and intercept (a0) as well in case needed for troubleshooting.
 }
 
 # xss is list of lists; return list consisting of xs[[i]] for each xs in xss:
