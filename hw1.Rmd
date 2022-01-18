@@ -1,0 +1,37 @@
+---
+title: "HW1, ISyE 6501"
+author: "(Omitted per TA recommendation)"
+date: "1/16/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(digits=3) # ...lest we over-fit
+library(purrr);  library(RSQLite); #library(comprehenr)
+library(kernlab); library(zeallot);
+library(rlist)
+```
+
+## Question 2.2.1: Find classifier using ksvm.
+
+The C value that I eventually settled on was 0.0014, which had a success rate of 0.867 = 86.7%. 
+
+
+```{r cars}
+summary(cars)
+```
+
+```{r}
+map(1:3, function(x) x*x) %>% unlist
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
