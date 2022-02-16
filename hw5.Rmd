@@ -1,0 +1,135 @@
+---
+title: "HW5, ISyE 6501"
+author: "Christopher 'Hank' Igoe"
+date: "2/15/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+library(pacman)
+p_load(knitr, purr, magrittr, assertthat,
+       zeallot, rlist, readr, corrplot)
+knitr::opts_chunk$set(echo = TRUE)
+options(digits=3)
+set.seed(1)
+```
+
+## Question 8.1
+
+>Describe a situation or problem from your job, everyday life, current events, etc., for which a linear regression model would be appropriate. List some (up to 5) predictors that you might use. 
+
+Linear regression is useful in finance, especially the CAPM (Capital Asset Pricing Model). [^medium] 
+
+Linear regression is also used to measure volatility by calculating the beta of a stock or index. [^magnimetrics]
+
+[^medium]: https://medium.com/magnimetrics/regression-analysis-in-financial-modeling-225425f544b9#:~:text=The%20linear%20regression%20model%20is,operational%20performance%20of%20the%20business.
+
+[^magnimetrics]: https://magnimetrics.com/how-to-calculate-the-beta-of-a-company/
+
+\pagebreak
+
+### Question 8.2
+
+>Using crime data from http://www.statsci.org/data/general/uscrime.txt  (file uscrime.txt, description at http://www.statsci.org/data/general/uscrime.html ), use regression (a useful R function is lm or glm) to predict the observed crime rate in a city with the following data:
+
+>>M = 14.0
+So = 0
+Ed = 10.0
+Po1 = 12.0
+Po2 = 15.5
+LF = 0.640
+M.F = 94.0
+Pop = 150
+
+>>NW = 1.1
+U1 = 0.120
+U2 = 3.6
+Wealth = 3200
+Ineq = 20.1
+Prob = 0.04
+Time = 39.0
+
+>Show your model (factors used and their coefficients), the software output, and the quality of fit. 
+>Note that because there are only 47 data points and 15 predictors, you’ll probably notice some overfitting.  We’ll see ways of dealing with this sort of problem later in the course.
+
+Before we get started, we must bear in mind throughout our analysis that we are basing our model on scant data - just 47 data points. To quote instructor Fang Zhou,
+
+> In practice, we will need to justify using a model built on one type of data to predict something of a different scope. For this homework, we use the data as an exercise. Feel free to discuss the potential issues or limitations of the model.
+
+The scantiness of the data is not necessarily a problem given that the techniques we are learning are general enough to be used in the more realistic settings encountered in practice, but it is something to remember.
+
+So with that in mind, these are the features of US crime data set:
+
+##### Variable and description
+
+1. M		percentage of males aged 14–24 in total state population
+2. So		indicator variable for a southern state
+3. Ed		mean years of schooling of the population aged 25 years or over
+4. Po1		per capita expenditure on police protection in 1960
+5. Po2		per capita expenditure on police protection in 1959
+6. LF		labour force participation rate of civilian urban males in the age-group 14-24
+7. M.F		number of males per 100 females
+8. Pop		state population in 1960 in hundred thousands
+9. NW		percentage of nonwhites in the population
+10. U1		unemployment rate of urban males 14–24
+11. U2		unemployment rate of urban males 35–39
+12. Wealth		wealth: median value of transferable assets or family income
+13. Ineq		income inequality: percentage of families earning below half the median income
+14. Prob		probability of imprisonment: ratio of number of commitments to number of offenses
+15. Time		average time in months served by offenders in state prisons before their first release
+16. Crime		crime rate: number of offenses per 100,000 population in 1960
+
+### Test point exploration
+
+Before we dive in to modeling the data set, let us take a look at the test point that we will be predicting on to see how it stacks up against the average point in the original set.
+
+```{r}
+uscrime <- read.table("../data/uscrime.txt", stringsAsFactors=F, header=T)
+
+test_point <- data.frame(M = 14.0, So = 0, Ed = 10.0, Po1 = 12.0, Po2 = 15.5,
+  LF = 0.640, M.F = 94.0, Pop = 150, NW = 1.1, U1 = 0.120, U2 = 3.6,
+  Wealth = 3200, Ineq = 20.1, Prob = 0.040, Time = 39.0)
+
+# Quantile of x with respect to xs
+quantile <- function(x, xs) {
+  loc <- 1
+  for (y in xs) if (x > y) loc = loc + 1
+  loc / (length(xs) + 1)
+}
+
+# Get quantiles of each df var relative to first N of df2 vars
+quantiles <- function(df, df2, N) {
+  ns <- names(df)
+  qs <- Map(function(i) quantile(df[i], df2[ ,i]), 1:N) %>% unlist
+  cbind(ns, qs)
+}
+
+qs <- quantiles(test_point, uscrime, 15)
+qs
+
+```
+
+Let us consider the most obvious model possible: Crime ~ .
+
+We will load the data and look at its correlation plot:
+
+```{r}
+corrplot(cor(uscrime))
+```
+
+Some highlights of the correlation:
+
+| Feature Pair | Description |
+| --- | ----------- |
+| M ~ Po1/Po2 | Medium negative correlation between males and police budget for 1960/1959 |
+| M ~ Po2 | Medium negative correlation between males and police budget for 1959 |
+| Paragraph | Text |
+
+\pagebreak
+
+```{r message=F,results='hide'}
+
+
+
+```
