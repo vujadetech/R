@@ -9,7 +9,7 @@ output: pdf_document
 rm(list=ls())
 library(pacman)
 p_load(knitr, purr, magrittr, assertthat,
-       zeallot, rlist, readr, corrplot)
+       zeallot, rlist, readr, corrplot, DAAG)
 knitr::opts_chunk$set(echo = TRUE)
 options(digits=3)
 set.seed(1)
@@ -19,17 +19,33 @@ set.seed(1)
 
 >Describe a situation or problem from your job, everyday life, current events, etc., for which a linear regression model would be appropriate. List some (up to 5) predictors that you might use. 
 
-Linear regression is useful in finance, especially the CAPM (Capital Asset Pricing Model). [^medium] 
+Linear regression is useful in finance, especially the CAPM (Capital Asset Pricing Model). [^medium] This is the fundamental equation[^wikiCAPM]:
+
+$E(R_i) = R_f + \beta_i(E(R_m)-R_f)$
+
+where:
+
+* $E(R_i)$ is the expected return of the asset
+* $R_f$ is the risk-free rate of interest (i.e., something boring but stable, e.g., a government bond)
+* $\beta_i$ is how much the asset varies as a multiple of market returns (e.g., a beta of 2 means that the asset goes up twice as much as the market does, but also down twice as much as the market does, when the market goes up or down, respectively)
+* $E(R_m)$ is the market return
+* $E(R_m)-R_f$ is the market premium, which is the price an investor pays to take part in the exchange, or more colloquially, "Don't hate the player, hate the game."
 
 Linear regression is also used to measure volatility by calculating the beta of a stock or index. [^magnimetrics]
 
-[^medium]: https://medium.com/magnimetrics/regression-analysis-in-financial-modeling-225425f544b9#:~:text=The%20linear%20regression%20model%20is,operational%20performance%20of%20the%20business.
+According to Investopedia, an investor considering stock in Apple can ...
 
+>... perform a linear regression, with the dependent variable performance of Apple stock over the last three years as an explanatory variable and the performance of the index over the same period.
+
+>Now that we have the results of our regression, the coefficient of the explanatory variable is our beta (the covariance divided by variance).[^investopedia]
+
+[^medium]: https://medium.com/magnimetrics/regression-analysis-in-financial-modeling-225425f544b9#:~:text=The%20linear%20regression%20model%20is,operational%20performance%20of%20the%20business.
+[^wikiCAPM]: https://en.wikipedia.org/wiki/Capital_asset_pricing_model
 [^magnimetrics]: https://magnimetrics.com/how-to-calculate-the-beta-of-a-company/
+[^investopedia]: https://www.investopedia.com/articles/investing/102115/what-beta-and-how-calculate-beta-excel.asp
 
 \pagebreak
-
-### Question 8.2
+## Question 8.2
 
 >Using crime data from http://www.statsci.org/data/general/uscrime.txt  (file uscrime.txt, description at http://www.statsci.org/data/general/uscrime.html ), use regression (a useful R function is lm or glm) to predict the observed crime rate in a city with the following data:
 
@@ -61,7 +77,7 @@ The scantiness of the data is not necessarily a problem given that the technique
 
 So with that in mind, these are the features of US crime data set:
 
-##### Variable and description
+#### Features and descriptions
 
 1. M		percentage of males aged 14–24 in total state population
 2. So		indicator variable for a southern state
@@ -80,17 +96,195 @@ So with that in mind, these are the features of US crime data set:
 15. Time		average time in months served by offenders in state prisons before their first release
 16. Crime		crime rate: number of offenses per 100,000 population in 1960
 
-### Test point exploration
-
-Before we dive in to modeling the data set, let us take a look at the test point that we will be predicting on to see how it stacks up against the average point in the original set.
+We will load the data and look at its correlation plot:
 
 ```{r}
-uscrime <- read.table("../data/uscrime.txt", stringsAsFactors=F, header=T)
+uscrime <- read.table("uscrime.txt", stringsAsFactors=F, header=T)
+corrplot(cor(uscrime %>% as.data.frame))
+```
 
+Some highlights of the correlation:
+
+### Figure 8.2.1
+| Feature Pair | Description |
+| --- | ----------- |
+| Crime ~ Po1/Po2 | Strong positive correlation between crime and police budget for 1960/1959. |
+| Crime ~  Pop | Medium positive correlation between crime and population. |
+| Crime ~  Wealth | Medium positive correlation between crime and wealth. |
+| Crime ~  Prob | Medium negative correlation between crime and probability of incarceration following a conviction. |
+
+Before honing in on particular features to include/exclude, let us establish a baseline by first considering the most obvious model possible: Crime ~ .
+
+```{r}
+# Test point given for us to predict on:
 test_point <- data.frame(M = 14.0, So = 0, Ed = 10.0, Po1 = 12.0, Po2 = 15.5,
   LF = 0.640, M.F = 94.0, Pop = 150, NW = 1.1, U1 = 0.120, U2 = 3.6,
   Wealth = 3200, Ineq = 20.1, Prob = 0.040, Time = 39.0)
 
+lm_base <- lm(Crime ~ ., data = uscrime)
+summary(lm_base)
+AIC(lm_base)
+predict(lm_base, test_point)
+```
+So we have p-value of essentially 0 which is clearly significant, an AIC of 650 which is meaningless in isolation but which will be helpful for comparison later, and an adjusted R-squared of 0.708 which is quite good, though we will take a closer look at R-squared later. Also, the predicted value is 155, which is extremely low. 
+
+Revisiting figure 8.2.1, we can test each of those variables to see how well they correlate with the Crime column. 
+
+```{r}
+# 16 for Crime col
+colNum2corr <- function(colNum, colCompare = 16, df = uscrime)
+  cor.test(df[, colNum], df[, colCompare])
+
+colNum2corrOnly <- function(colNum, colCompare = 16, df = uscrime)
+  colNum2corr(colNum, colCompare, df)$estimate
+
+colNum2corrs <- function(colNums, colCompare = 16, df = uscrime) {
+  Map(function(colNum) colNum2corrOnly(colNum, colCompare, df), colNums)
+}
+
+colNum2corrs(c(4,5,8,12,14)) %>% unlist
+```
+Those are the correlations for columns 4, 5, 8, 12 and 14, respectively, which are the columns with names "Po1", "Po2", "Pop", "Wealth" and "Prob" respectively. They all have a reasonable amount of correlation with the Crime column so we can consider them our working set for hewing into our final model.
+
+In measuring the quality of each model, we will consider its p-value, R-sq adjusted, cross-validated R-squared adjusted and its AIC value.
+
+Let us start with, Crime ~ ., our naive model. We already computed some of this information above, so we just need its cross-validated R-squared value and its prediction.
+
+NB: We will be using 5-fold cross-validation since it is the most common.
+
+```{r message=F}
+# Rsquared of cross-validated data
+# Default use is Crime column = 16 of uscrime data frame
+model2cvRsq <- function(model, m, colNum = 16, df = uscrime) {
+  cv_lm <- cv.lm(df, model, m)
+  colData <- df[, colNum]
+  SStot <- (colData - mean(colData))^2 %>% sum
+  SSres_CV <- attr(cv_lm, "ms")*nrow(df)
+  list(c('Rsq', 1 - (SSres_CV / SStot)), c('ssTot', SStot), c('ssResCV', SSres_CV))
+}
+
+model2cvRsq(lm_base, m=5)
+```
+
+A cross-validated R-squared of 0.420 is not as good as our adjusted R-squared of 0.708, but it is more realistic. We can use a table to track our analysis.
+
+### Table 8.2.1 (NB: the prediction column is just for reference, not selecting a model)
+
+| Model | p-value | AIC | adjusted R-sq | CV R-sq |prediction|
+|-|-|-|-|-|-|
+|lm_base|0|650|0.708|0.419|155|
+
+Earlier we mentioned that the 5 features with a high correlation to Crime are 4, 5, 8, 12 and 14 representing Po1, Po2, Pop, Wealth and Prob. We can now make a model for those features and compare.
+```{r}
+lm4581214 <- lm(Crime ~ Po1 + Po2 + Pop + Wealth + Prob, data = uscrime)
+lm4581214 %>% summary
+```
+So the p-val is 0 and adjusted R-squared is 0.503...
+```{r}
+AIC(lm4581214)
+predict_ <- function(model, pt = test_point) # convenience function
+  predict(model, pt)
+predict_(lm4581214)
+```
+... and the AIC and prediction are 668 and 897, respectively ...
+```{r}
+model2cvRsq(lm4581214, m=5)
+```
+... and the CV R-squared is 0.337, so we can now update our table.
+
+Table 8.2.2
+
+| Model | p-value | AIC | adjusted R-sq | CV R-sq |prediction|
+|-|-|-|-|-|-|
+|lm_base|0|650|0.708|0.419|155|
+|lm4581214 |0|668|0.503|0.337|897|
+
+Notice that we have included both Po1 and Po2, which are (unsurprisingly) highly correlated with each other.
+```{r}
+colNum2corr(4, 5) # Po1 (1960), Po2 (1959)
+```
+We will remove column 5/Po2 from the previous model to make our next model.
+```{r}
+lm481214 <- lm(Crime ~ Po1 + Pop + Wealth + Prob, data = uscrime)
+lm481214 %>% summary
+```
+So the p-val is 0 and the adjusted R-squared is 0.499 ...
+```{r}
+lm481214 %>% AIC
+lm481214 %>% predict_
+```
+... and the AIC and prediction are 668 and 1571 ...
+```{r}
+model2cvRsq(lm481214, 5)
+```
+... and the CV R-squared is 0.358, so we can update our table.
+
+Table 8.2.3
+
+| Model | p-value | AIC | adjusted R-sq | CV R-sq |prediction|
+|-|-|-|-|-|-|
+|lm_base|0|650|0.708|0.419|155|
+|lm4581214 |0|668|0.503|0.337|897|
+|lm481214  |0|668| 0.499|0.358|1571|
+
+Recall that among the 5 features that we started with, the one with the lowest correlation to Crime was column 8/Pop, so let us try removing that one next.
+```{r}
+lm41214 <- lm(Crime ~ Po1 + Wealth + Prob, data = uscrime)
+lm41214 %>% summary
+```
+So the p-value is 0 and the adjusted R-squared is 0.499 ...
+```{r}
+lm41214 %>% AIC
+lm41214 %>% predict_
+```
+... and the AIC and prediction are 667 and 1632 ...
+```{r}
+model2cvRsq(lm41214, 5)
+```
+... and the CV R-squared is 0.292, and we update our table.
+
+Table 8.2.4
+
+| Model | p-value | AIC | adjusted R-sq | CV R-sq |prediction|
+|-|-|-|-|-|-|
+|lm_base|0|650|0.708|0.419|155|
+|lm4581214 |0|668|0.503|0.337|897|
+|lm481214  |0|668|0.499|0.358|1571|
+|lm41214   |0|667|0.499|0.292|1632|
+
+Finally, let us try just Po1, Pop and Prob, columns 4, 8 and 12, respectively.
+```{r}
+lm4814 <- lm(Crime ~ Po1 + Pop + Prob, data = uscrime)
+lm4814 %>% summary
+```
+So the p-value is 0 and adjusted R-squared is 0.452 ...
+```{r}
+lm4814 %>% AIC
+lm4814 %>% predict_
+```
+... and the AIC and prediction are 671 and 1157, respectively ...
+```{r}
+model2cvRsq(lm4814, 5)
+```
+... and the CV R-squared is 0.292, and we update our table:
+
+Table 8.2.5
+
+| Model | p-value | AIC | adjusted R-sq | CV R-sq |prediction|
+|-|-|-|-|-|-|
+|lm_base|0|650|0.708|0.419|155|
+|lm4581214 |0|668|0.503|0.337|897|
+|lm481214  |0|668|0.499|0.358|1571|
+|lm41214   |0|667|0.499|0.292|1632|
+|lm4814|0|671|0.452|0.292|1157|
+
+None of these models are really grabbing our attention, but we do have a quite limited data set to work with, so this will have to do. The low CV R-squared values are disappointing, but at least there is a consitency to the predictions. They are all fairly large and most are over 1,000. Let us see if that makes sense in the context of our test point.
+
+#### Test point exploration
+
+Now let us take a look at the test point to see how it stacks up against the average point in the original set.
+
+```{r}
 # Quantile of x with respect to xs
 quantile <- function(x, xs) {
   loc <- 1
@@ -107,29 +301,8 @@ quantiles <- function(df, df2, N) {
 
 qs <- quantiles(test_point, uscrime, 15)
 qs
-
 ```
 
-Let us consider the most obvious model possible: Crime ~ .
+The 4th (Po1), 5th (Po2) and 8th (Pop) are all well above average, the 12th (Wealth) is far below average, and 14th (Prob) is slightly below average. Typically high Wealth correlates to high Crime, so that should be bringing the prediction down, though it surprisingly is not having that effect. So the feature of Wealth would need to be scrutinized further before deploying any model that uses it 'into the wild.' The Prob feature is slightly below average, which is consistent with the fact that it is negatively correlated with Crime. 
 
-We will load the data and look at its correlation plot:
-
-```{r}
-corrplot(cor(uscrime))
-```
-
-Some highlights of the correlation:
-
-| Feature Pair | Description |
-| --- | ----------- |
-| M ~ Po1/Po2 | Medium negative correlation between males and police budget for 1960/1959 |
-| M ~ Po2 | Medium negative correlation between males and police budget for 1959 |
-| Paragraph | Text |
-
-\pagebreak
-
-```{r message=F,results='hide'}
-
-
-
-```
+Of all the models, I'm partial to lm4814 due to its simplicity: Crime is a function of just 3 variables: police budget, population, and the probability of imprisonment conditioning on the number of offenses. Although it gives the precise prediction of 1157, I feel silly using 4 significant figures when there is so much uncertainty in play, so I will say to expect 1200. However, I will also note that it should be taken with caution since both R-squared calculations and especially the CV R-squared indicate that little of the model's variation is explained. So let us put a window of radius 300 around around the prediction and say that it is in the range of 900 to 1500, and do not be surprised if it is even beyond that. Unfortunately I cannot say how surprised you should be because I have yet to master the machinery necessary to answer such a question, so settling that matter will wait until a future assignment.
